@@ -31,7 +31,7 @@ struct CALL_DATA
 	UINT64 Arg2;
 	UINT64 Arg3;
 	UINT64 Arg4;
-	UINT64 ÑallResult;
+	UINT64 CallResult0;
 };
 
 typedef struct SYSTEM_MODULE {

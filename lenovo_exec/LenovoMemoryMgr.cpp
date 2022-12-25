@@ -29,7 +29,7 @@ UINT64 LenovoMemoryMgr::CallKernelFunction(UINT64 address, UINT64 arg1, UINT64 a
 	call_data.Arg2 = arg2;
 	call_data.Arg3 = arg3;
 	call_data.Arg4 = arg4;
-	call_data.ÑallResult = reinterpret_cast<UINT64>(&call_result);
+	call_data.CallResult0 = reinterpret_cast<UINT64>(&call_result);
 	
 	DWORD dwBytesReturned = 0;
 
