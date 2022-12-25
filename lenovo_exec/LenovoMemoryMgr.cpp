@@ -12,25 +12,6 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 #include <conio.h>
 #include <iostream>
 
-__forceinline void hexdump3(void* ptr, int buflen)
-{
-	unsigned char* buf = (unsigned char*)ptr;
-	int i, j;
-	for (i = 0; i < buflen; i += 16) {
-		printf("%06x: ", i);
-		for (j = 0; j < 16; j++)
-			if (i + j < buflen)
-				printf("%02x ", buf[i + j]);
-			else
-				printf("   ");
-		printf(" ");
-		for (j = 0; j < 16; j++)
-			if (i + j < buflen)
-				printf("%c", isprint(buf[i + j]) ? buf[i + j] : '.');
-		printf("\n");
-	}
-}
-
 UINT64 LenovoMemoryMgr::CallKernelFunction(UINT64 address, UINT64 arg1, UINT64 arg2, UINT64 arg3, UINT64 arg4)
 {
 	if (!address) 
