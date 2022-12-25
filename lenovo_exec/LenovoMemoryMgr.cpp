@@ -254,9 +254,7 @@ UINT64 LenovoMemoryMgr::FindPhysSwapSpace()
 
 UINT64 LenovoMemoryMgr::GetPteBase()
 {
-	const auto mi_get_pte_address_offset = 0x2DDF81;
-	const auto address = NtosBase + mi_get_pte_address_offset + 0x2;
-
+	const auto address = NtosBase + OFFSET_MI_GET_PTE_ADDRESS + 0x13;
 	UINT64 qwPteBase = 0;
 
 	ReadVirtData(address, &qwPteBase);

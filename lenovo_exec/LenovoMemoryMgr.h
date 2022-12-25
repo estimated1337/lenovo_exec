@@ -145,13 +145,14 @@ static BYTE arrMiFillPteHeirarchyPTEMask[13] = { 0, 0, '?', '?', '?', '?','?', '
 // end pattern matching
 
 #define OFFSET_EPROCESS_LINKS 0x448
-#define OFFSET_EPROCESS_TOKEN 0x4b8
 #define OFFSET_EPROCESS_PID 0x440
 #define OFFSET_EPROCESS_THREAD_HEAD_LIST 0x5E0
 
 #define OFFSET_ETHREAD_ID 0x480
 #define OFFSET_ETHREAD_PREVIOUS_MODE 0x232
 #define OFFSET_ETHREAD_LIST_ENTRY 0x4E8
+
+#define OFFSET_MI_GET_PTE_ADDRESS 0x2DDF70
 
 class LenovoMemoryMgr
 {
